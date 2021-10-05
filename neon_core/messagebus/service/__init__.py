@@ -28,14 +28,16 @@ The message bus facilitates inter-process communication between mycroft-core
 processes. It implements a websocket server so can also be used by external
 systems to integrate with the Mycroft system.
 """
+import asyncio
 import sys
 from os.path import expanduser, isfile
 from threading import Thread
 
+import tornado.options
 from mycroft.messagebus.load_config import load_message_bus_config
 from mycroft.messagebus.service.event_handler import MessageBusEventHandler
 from mycroft.util.log import LOG
-from tornado import autoreload, web, ioloop
+from tornado import web, ioloop
 
 
 class NeonBusService(Thread):
@@ -45,22 +47,18 @@ class NeonBusService(Thread):
         self.debug = debug
         self.setDaemon(daemonic)
 
-    def start(self):
+    def run(self):
         LOG.info('Starting message bus service...')
         self._init_tornado()
         self._listen()
         LOG.info('Message bus service started!')
+        ioloop.IOLoop.instance().start()
 
     def _init_tornado(self):
-        import tornado.options
         # Disable all tornado logging so mycroft loglevel isn't overridden
         tornado.options.parse_command_line(sys.argv + ['--logging=None'])
-
-        def reload_hook():
-            """ Hook to release lock when auto reload is triggered. """
-            lock.delete()
-
-        autoreload.add_reload_hook(reload_hook)
+        # get event loop for this thread
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
     def _listen(self):
         routes = [(self.config.route, MessageBusEventHandler)]
@@ -83,9 +81,6 @@ class NeonBusService(Thread):
         else:
             LOG.info("ws listener started")
             application.listen(self.config.port, self.config.host)
-
-    def run(self):
-        ioloop.IOLoop.instance().start()
 
     def shutdown(self):
         pass  # TODO
